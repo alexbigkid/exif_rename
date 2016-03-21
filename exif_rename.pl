@@ -13,17 +13,14 @@
 
 use strict;
 use warnings;
-#use POSIX ":sys_wait_h";
 use POSIX ":sys_wait_h";
 #use lib "$ENV{'HOME'}/lx/bin/lib";
 #use lib "$ENV{'HOME'}/Pictures/bin";
 use lib "/usr/bin/lib";
 use Image::ExifTool;
 use Getopt::Std;
-#use Image::Pimage;
 use Cwd;
 use Cwd 'chdir';
-#use Shell;
 use vars qw( $opt_h $opt_d $testing );
 use File::Copy;
 use File::Basename;
@@ -391,14 +388,14 @@ sub move_and_rename_files ( $$ )
 
   print STDOUT "[MOVE_AND_RENAME_FILES] \$dir_hash = $dir_hash, \$file_hash = $file_hash\n" if(defined($testing));
 
-#  get the last part of directory
+  # get the last part of directory
   $event_name = lc(basename(cwd()));
-#  print STDOUT "1 [MOVE_AND_RENAME_FILES] \$event_name = $event_name\n" if(defined($testing));
+  # print STDOUT "1 [MOVE_AND_RENAME_FILES] \$event_name = $event_name\n" if(defined($testing));
   @array_tmp = split $sep_sign, $event_name;
   $date_backup = shift @array_tmp;
-#  print STDOUT "2[MOVE_AND_RENAME_FILES] \$date_backup = $date_backup\n" if(defined($testing));
+  # print STDOUT "2[MOVE_AND_RENAME_FILES] \$date_backup = $date_backup\n" if(defined($testing));
   $event_name = join $sep_sign, @array_tmp;
-#  print STDOUT "[MOVE_AND_RENAME_FILES] dir = $event_name\n" if(defined($testing));
+  # print STDOUT "[MOVE_AND_RENAME_FILES] dir = $event_name\n" if(defined($testing));
 
   # create sub directory structure
   foreach(keys %{$dir_hash})
@@ -464,7 +461,7 @@ sub read_raw_dirs ( )
         opendir(RAW_DIR, "./$dir") or die "$errors{openDir} $ENV{PWD}: $!\n";
         # sort exclude all files with . in front of it
         push @{$ret_hash{$dir}}, sort grep !/^\./, grep !/$files2exclude/, readdir RAW_DIR;
-        #@file_names = sort grep !/^\./, grep !/$files2exclude/, grep -f, readdir RAW_DIR;
+#        @file_names = sort grep !/^\./, grep !/$files2exclude/, grep -f, readdir RAW_DIR;
         closedir(RAW_DIR);
       }
     }
@@ -506,7 +503,7 @@ sub convert_to_dng ( $ )
   printf STDOUT "[CONVERT_TO_DNG] CPU load: %s\n"       , $info_cpu->load  || 0 if(defined($testing));
   $info_cpu_ht = $info_cpu->ht;
 
-#print OUTPUT Dumper(%{$raw_ref});
+#  print OUTPUT Dumper(%{$raw_ref});
 
   # if there are more then 1 directory with raw files
   foreach ( keys %{$dng_hash} )
@@ -715,7 +712,5 @@ sub convert_to_dng_task( $$ )
   print STDOUT "<- [CONVERT_TO_DNG_TASK] $$\n" if(defined($testing));
   return $ret_val;
 }
-
-
 
 __END__
