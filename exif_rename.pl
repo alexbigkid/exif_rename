@@ -22,14 +22,15 @@ use Getopt::Std;
 use Cwd;
 use Cwd 'chdir';
 use vars qw( $opt_h $opt_d $testing );
-use File::Copy;
+#use File::Copy;
 use File::Basename;
 use File::Find;
 use File::Path qw(remove_tree rmtree);
-use Switch;
 use Sys::Info;
 use Sys::Info::Constants qw( :device_cpu );
 use Data::Dumper;
+#use YAML;
+#use Win32::EventLog;
 use constant false => 0;
 use constant true  => 1;
 
@@ -44,9 +45,7 @@ getopt('d');
 #--------------------------------------------------------------------------
 my (
 $abk_canon_mod,         # abk canon camera model modifications
-$dir_name,              # directory name
 $dir_pattern,           # directory pattern
-$dir_prefix,            # directory prefix
 $dng_converter,         # dng converter app
 $dng_ext,               # dng extantion
 %errors,                # error code
@@ -54,19 +53,13 @@ $files2exclude,         # files to exclude from search
 $hash_ref,              # hash reference to the read structure
 $hash_new_names,        # hash with new names
 @img_ext,               # image extension name
-$info,
-$info_cpu,
-$info_cpu_ht,
-%options,               # options for the cpu
+%os_env,                # OS type environment variables
 @raw_ext,               # raw files extension
-$raw_hash,              #reference to hash or raw directories
-$raw_target,            # name of the raw target file extension
+$raw_hash,              # reference to hash or raw directories
 $sep_sign,              # separation sign
 $shell_var,             # shell type
-$sub_dirs,              # sub directories to create
 $this_file,             # the name of this file/ program
-%thmb,                  # properties for thumbnail files
-$unix_like              # 1 if unix like system, 0 if not
+%thmb                  # properties for thumbnail files
 );
 
 
@@ -75,6 +68,8 @@ $unix_like              # 1 if unix like system, 0 if not
 #--------------------------------------------------------------------------
 $abk_canon_mod = true;
 $dir_pattern  = '^\d{8}_\w+';
+$dng_converter = undef;
+$dng_ext  = 'dng';
 %errors       = (
   'chDir'     => 'cannot change to the directory',
   'format'    => 'does not have the expected format',
@@ -82,14 +77,18 @@ $dir_pattern  = '^\d{8}_\w+';
   'openFile'  => 'can not open the file:',
   'createFile'=> 'can not create the file:',
 );
-$files2exclude = "Adobe Bridge Cache|Thumbs.db";
+$files2exclude  = "Adobe Bridge Cache|Thumbs.db";
+$hash_ref       = undef;
+$hash_new_names = undef;
 @img_ext   = ('avi', 'cr2', 'jpg', 'jpeg', 'tiff');
-$this_file = basename($0, "");
-%thmb      = (
-  'ext'    => "jpg",
-  'dir'    => "thmb",
+%os_env    = (
+  'win_env' => 'MSWin32',
+  'mac_env' => 'darwin',
+  'win_con' => 'C:\Program Files (x86)\Adobe\Adobe DNG Converter.exe',
+  'mac_con' => '/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter',
+  'MSWin32' => \&convert_to_dng_win,
+  'darwin'  => \&convert_to_dng,
 );
-$sep_sign = '_';
 #@raw_ext  = ('cr2', 'dng');
 # cr2 - RAW for Canon cameras
 # 3fr - RAW for Hasselblad cameras
@@ -97,34 +96,35 @@ $sep_sign = '_';
 # nef - RAW for Nikon cameras
 #@raw_ext  = ('cr2', '3fr', 'sr2', 'nef');
 @raw_ext  = ('cr2', 'nef');
-$dng_ext  = 'dng';
-
+$raw_hash = undef;
+$sep_sign = '_';
 $shell_var = $^O;
-# if OS is unix like this variable has to be true
-$unix_like = ($shell_var =~ m/solaris|linux|freeBSD|hp-ux|darwin/) ? 1 : 0;
+$this_file = basename($0, "");
+%thmb      = (
+  'ext'    => "jpg",
+  'dir'    => "thmb",
+);
+
+#--------------------------------------------------------------------------
+# setup
+#--------------------------------------------------------------------------
 print STDOUT "\$^O = $^O\n" if(defined($testing));
-print STDOUT "\$unix_like = $unix_like\n" if(defined($testing));
 print STDOUT "\$shell_var = $shell_var\n" if(defined($testing));
 
-print STDOUT "the shell is " if(defined($testing));
-
-switch ($shell_var) {
-    case /darwin/
-    {
-      $dng_converter = "/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter";
-      print STDOUT "MacOSX\n" if(defined($testing));
-    }
-    case /solaris/  { print STDOUT "solaris\n" if(defined($testing)); }
-    case /freeBSD/  { print STDOUT "freeBSD\n" if(defined($testing)); }
-    case /hp-ux/    { print STDOUT "hp-ux\n"   if(defined($testing)); }
-    case /windows/ 
-    {
-      $dng_converter = 'C:\Program Files\Adobe DNG Converter.exe';
-      print STDOUT "windows\n" if(defined($testing));
-    }
-    else            { print STDOUT "no se\n"   if(defined($testing)) }
+if($shell_var eq $os_env{'win_env'})
+{
+  $dng_converter = $os_env{'win_con'} if(-e -s $os_env{'win_con'});
+  print STDOUT "Windows env: $os_env{'win_con'}\n" if(defined($testing));
 }
-
+if($shell_var eq $os_env{'mac_env'})
+{
+  $dng_converter = $os_env{'mac_con'} if(-e -s $os_env{'mac_con'});
+  print STDOUT "Mac OSX env: $os_env{'mac_con'}\n" if(defined($testing));
+}
+else
+{
+  print STDOUT "Unknown environment\n" if(defined($testing));
+}
 
 print STDOUT "\@ARGV  = ", scalar(@ARGV), "\n" if(defined($testing));
 print STDOUT "\$ARGV[0] = $ARGV[0]\n" if(defined($ARGV[0]) && defined($testing));
@@ -152,6 +152,7 @@ sub convert_to_dng ( $ );
 sub process_pids ( $$$ );
 sub delete_raw_dirs ( $ );
 sub convert_to_dng_task( $$ );
+sub convert_to_dng_win( $ );
 
 
 #=============================================================================
@@ -186,8 +187,11 @@ if(defined($hash_ref))
   #-----------------------------------------------------------------------
   move_and_rename_files($hash_ref, $hash_new_names);
   
+  #------------------------------------------------------------------------
   # check for dng converter availability
-  if(defined($dng_converter) && -f $dng_converter)
+  # convert to DNG format if we can and delete original raw files
+  #-----------------------------------------------------------------------
+  if(defined($dng_converter))
   {
     print STDOUT "[MAIN] dng_converter available\n" if(defined($testing));
 
@@ -196,7 +200,10 @@ if(defined($hash_ref))
     # convert to dng and if successful delete the original raw directory
     print STDOUT "[MAIN] \$raw_hash = $raw_hash\n" if(defined($testing));
     
-    if ( convert_to_dng ( $raw_hash ) )
+    #depending on the environment a different function call will be called
+	# windows env does not cope well with fork, wait, waitpid
+	# so the dng conversion is slower
+    if ( ($os_env{$shell_var})->( $raw_hash ) )
     {
       delete_raw_dirs ( $raw_hash );
     }
@@ -204,7 +211,6 @@ if(defined($hash_ref))
     {
       print STDOUT "[MAIN] convert_to_dng delivered false!\n";
     }
-
   }
 }
 else
@@ -352,19 +358,8 @@ sub read_dir ( )
     push @{$ret_hash_names{$dir_name}}, $$file_info{$create_date};
   }
 
-#   if(defined($testing))
-#   {
-#     foreach(keys %ret_hash)
-#     {
-#       print STDOUT "[READ_DIRS] \$ret_hash{$_} = @{$ret_hash{$_}}\n";
-#     }
-# 
-#     foreach(keys %ret_hash_names)
-#     {
-#       print STDOUT "[READ_DIRS] \$ret_hash_names{$_} = @{$ret_hash_names{$_}}\n";
-#     }
-#     
-#   }
+  print STDOUT "[READ_DIRS] \$ret_hash =\n", Dumper \%ret_hash, "\n\n" if(defined($testing));
+  print STDOUT "[READ_DIRS] \$ret_hash_names =\n", Dumper \%ret_hash_names, "\n\n" if(defined($testing));
 
   print STDOUT "<- [READ_DIR]\n" if(defined($testing));
   return \%ret_hash, \%ret_hash_names;
@@ -457,24 +452,20 @@ sub read_raw_dirs ( )
       {
         print STDOUT "[READ_RAW_DIRS] \$_ = $_, \$dir = $dir\n" if(defined($testing));
 
+        # change into the RAW file directory to read the files sizes also, to ignore 0 byte size files
+		chdir "$dir" or die "[ERROR] cannot change to directory $dir: $!\n";
         # read file names of raw files
-        opendir(RAW_DIR, "./$dir") or die "$errors{openDir} $ENV{PWD}: $!\n";
+        opendir(RAW_DIR, ".") or die "$errors{openDir} $ENV{PWD}: $!\n";
         # sort exclude all files with . in front of it
-        push @{$ret_hash{$dir}}, sort grep !/^\./, grep !/$files2exclude/, readdir RAW_DIR;
-#        @file_names = sort grep !/^\./, grep !/$files2exclude/, grep -f, readdir RAW_DIR;
+        push @{$ret_hash{$dir}}, sort grep !/^\./, grep !/$files2exclude/, grep -s -f, readdir RAW_DIR;
         closedir(RAW_DIR);
+        chdir ".." or die "[ERROR] cannot change to directory .. : $!\n";
       }
     }
   }
   
-  if(defined($testing))
-  {
-    foreach(keys %ret_hash)
-    {
-      print STDOUT "[READ_RAW_DIRS] \$ret_hash{$_} = @{$ret_hash{$_}}\n";
-    }
-  }
-  
+  print STDOUT "[READ_RAW_DIRS] \$ret_hash =\n", Dumper \%ret_hash, "\n\n" if(defined($testing));
+
   print STDOUT "<- [READ_RAW_DIRS]\n" if(defined($testing));
   return \%ret_hash;
 }
@@ -489,6 +480,7 @@ sub convert_to_dng ( $ )
 {
   my ($dng_hash) = @_;
   my ($dng_dir, $raw_dir, $max_kids, %work, @work, %pids, $ret_val, $res);
+  my ($info, $info_cpu, $info_cpu_ht, %options);
   
   print STDOUT "-> [CONVERT_TO_DNG] \$dng_hash = $dng_hash\n" if(defined($testing));
   $ret_val = true;
@@ -502,6 +494,7 @@ sub convert_to_dng ( $ )
   printf STDOUT "[CONVERT_TO_DNG] Hyper threads %d\n"   , $info_cpu->ht    || 1 if(defined($testing));
   printf STDOUT "[CONVERT_TO_DNG] CPU load: %s\n"       , $info_cpu->load  || 0 if(defined($testing));
   $info_cpu_ht = $info_cpu->ht;
+#  $info_cpu_ht = $info_cpu->count;
 
 #  print OUTPUT Dumper(%{$raw_ref});
 
@@ -564,7 +557,7 @@ sub convert_to_dng ( $ )
       select undef, undef, undef, .25;
     }
     
-    # wait untill all child processes are complete
+    # wait until all child processes are complete
     while(($res=wait) != -1)
     {
       process_pids( \%pids, \%work, $res );
@@ -582,21 +575,23 @@ sub convert_to_dng ( $ )
 sub process_pids ( $$$ )
 {
   my ( $pids, $work, $res ) = @_;
-  print "-> [PROCESS_PIDS] $pids, $work, $res\n" if(defined($testing));
+  print STDOUT "-> [PROCESS_PIDS] $pids, $work, $res\n" if(defined($testing));
+
+  print STDOUT "[PROCESS_PIDS] \$res = $res \n" if(defined($testing));
 
   if ($res > 0)
   {
     delete $$pids{$res};
     my $rc = $? >> 8; #get the exit status
-    print "[PROCESS_PIDS] $$ saw $res was done with $rc\n" if(defined($testing));
+    print STDOUT "[PROCESS_PIDS] $$ saw $res was done with $rc\n" if(defined($testing));
     delete $$work{$rc};
-    print "[PROCESS_PIDS] $$ work left: ", join(", ", sort {$a <=> $b} keys %{$work}), "\n" if(defined($testing));
+    print STDOUT "[PROCESS_PIDS] $$ work left: ", join(", ", sort {$a <=> $b} keys %{$work}), "\n" if(defined($testing));
   }
   else
   {
-    print "[PROCESS_PIDS] $$ wait returned < 0, FAIL\n" if(defined($testing));
+    print STDOUT "[PROCESS_PIDS] $$ wait returned < 0, FAIL\n" if(defined($testing));
   }
-  print "<- [PROCESS_PIDS]\n" if(defined($testing));
+  print STDOUT "<- [PROCESS_PIDS]\n" if(defined($testing));
 }
 
 ################################################################################
@@ -626,22 +621,26 @@ sub delete_raw_dirs ( $ )
     print STDOUT "[DELETE_RAW_DIRS] \$dng_dir       = $dng_dir\n" if(defined($testing));
     print STDOUT "[DELETE_RAW_DIRS] \$raw_dir       = $raw_dir\n" if(defined($testing));
 
-    opendir(DNG_DIR, "./$dng_dir") or die "$errors{openDir} $ENV{PWD}: $!\n";
-    # sort exclude all files with . in front of it
-    push @file_names, sort grep !/^\./, grep !/$files2exclude/, readdir DNG_DIR;
+    # change to the dng directory, otherwise we won't get the file size
+    chdir "$dng_dir" or die "cannot change to directory $dng_dir: $!\n";
+    opendir(DNG_DIR, ".") or die "$errors{openDir} $ENV{PWD}: $!\n";
+    # sort exclude all files with . in front of it and 0 byte files
+    push @file_names, sort grep !/^\./, grep !/$files2exclude/, grep -s -f, readdir DNG_DIR;
     closedir(DNG_DIR);
+    # change back to the original directory
+    chdir ".." or die "cannot change to directory .. : $!\n";
 
     print STDOUT "[DELETE_RAW_DIRS] \$#file_names       = $#file_names\n" if(defined($testing));
     print STDOUT "[DELETE_RAW_DIRS] \$#{$$dng_hash{$_}} = $#{$$dng_hash{$_}}\n" if(defined($testing));
-#    print STDOUT "[DELETE_RAW_DIRS] \@file_names = @file_names\n" if(defined($testing));
+    print STDOUT "[DELETE_RAW_DIRS] \@file_names = @file_names\n" if(defined($testing));
 
 
     if ( $#file_names == $#{$$dng_hash{$_}} )
     {
       for my $i (0 .. $#file_names)
       {
-        print STDOUT "[DELETE_RAW_DIRS] \$file_names[$i] = $file_names[$i]\n" if(defined($testing));
-        print STDOUT "[DELETE_RAW_DIRS] \${$$dng_hash{$_}}[$i] = ${$$dng_hash{$_}}[$i]\n" if(defined($testing));
+#        print STDOUT "[DELETE_RAW_DIRS] \$file_names[$i]         = $file_names[$i]\n" if(defined($testing));
+#        print STDOUT "[DELETE_RAW_DIRS] \${$$dng_hash{$_}}[$i] = ${$$dng_hash{$_}}[$i]\n" if(defined($testing));
 
         $raw_file = basename(${$$dng_hash{$_}}[$i], @raw_ext);
         $dng_file = basename($file_names[$i], $dng_ext);
@@ -712,5 +711,55 @@ sub convert_to_dng_task( $$ )
   print STDOUT "<- [CONVERT_TO_DNG_TASK] $$\n" if(defined($testing));
   return $ret_val;
 }
+
+################################################################################
+# Name :          convert_to_dng_win
+################################################################################
+# function:       converts proprietary raw files to dng files
+#                 returns true if all files converted successfully
+################################################################################
+sub convert_to_dng_win( $ )
+{
+  my ($dng_hash) = @_;
+  my ($dng_dir, $raw_dir, %work, @work, $ret_val);
+  
+  print STDOUT "-> [CONVERT_TO_DNG_WIN] \$dng_hash = $dng_hash\n" if(defined($testing));
+  $ret_val = true;
+  
+#  print OUTPUT Dumper(%{$raw_ref});
+
+  # if there are more then 1 directory with raw files
+  foreach ( keys %{$dng_hash} )
+  {
+    # replace last 3 characters with dng extension
+    $raw_dir = $_;
+    $dng_dir = $_;
+    $dng_dir =~ s/\w{3}$/$dng_ext/;
+    mkdir $dng_dir, 0755 or die $! unless -d $dng_dir;
+    printf STDOUT "[CONVERT_TO_DNG] created directory: $dng_dir\n";
+    
+    %work = map { $_ => 1 } 1 .. ($#{$$dng_hash{$_}} + 1);
+    @work = sort {$a <=> $b} keys %work;
+
+    # loop over number of raw files
+    while (@work)
+    {
+      my $work = shift @work;
+
+      print STDOUT "[CONVERT_TO_DNG] \$work = $work\n" if(defined($testing));
+      print STDOUT "[CONVERT_TO_DNG] \@work = @work\n" if(defined($testing));
+
+      print STDOUT "[CONVERT_TO_DNG] $$ kid executing $work\n" if(defined($testing));
+      if(defined(${$$dng_hash{$_}}[$work-1]) && (${$$dng_hash{$_}}[$work-1] ne ""))
+      {
+        $ret_val = convert_to_dng_task( $dng_dir, "$raw_dir/${$$dng_hash{$_}}[$work-1]" );
+      }
+      print STDOUT "[CONVERT_TO_DNG] $$ kid done $work\n" if(defined($testing));
+    }
+  }
+  print STDOUT "<- [CONVERT_TO_DNG]\n" if(defined($testing));
+  return $ret_val;
+}
+
 
 __END__
