@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 ##############################################################################
 # author:           Alex Berger
-# Copyright:        (C) @lex Berger / alexbigkid@gmail.com
+# Copyright:        (C) @lex Berger
 # Company:          http://www.abkphoto.com
 # function:         this script will rename images, numerate them, move them
 #                   into subdirectories.
@@ -207,8 +207,8 @@ if(defined($hash_ref))
     print STDOUT "[MAIN] \$raw_hash = $raw_hash\n" if(defined($opts{t}));
     
     #depending on the environment a different function call will be called
-	# windows env does not cope well with fork, wait, waitpid
-	# so the dng conversion is slower
+    # windows env does not cope well with fork, wait, waitpid
+    # so the dng conversion is slower
     if ( ($os_env{$shell_var})->( $raw_hash ) )
     {
       delete_raw_dirs ( $raw_hash );
