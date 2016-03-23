@@ -131,6 +131,8 @@ print STDOUT "\@ARGV  = ", scalar(@ARGV), "\n" if(defined($opts{t}));
 print STDOUT "\$ARGV[0] = $ARGV[0]\n" if(defined($ARGV[0]) && defined($opts{t}));
 print STDOUT "\$this_file = $this_file\n" if(defined($this_file) && defined($opts{t}));
 print STDOUT "\$opts{h} = $opts{h}\n" if(defined($opts{h}) && defined($opts{t}));
+print STDOUT "\$opts{t} = $opts{t}\n" if(defined($opts{t}));
+print STDOUT "\$opts{v} = $opts{v}\n" if(defined($opts{v}) && defined($opts{t}));
 print STDOUT "\$opts{d} = $opts{d}\n" if(defined($opts{d}) && defined($opts{t}));
 
 die "$this_file version: $version\n(c) \@lex Berger\n"
