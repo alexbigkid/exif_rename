@@ -1,7 +1,8 @@
 #!/usr/bin/perl -w
 ##############################################################################
 # author:           Alex Berger
-# Copyright:        (C) @lex Berger
+# Copyright:        (C) @lex Berger / alexbigkid@gmail.com
+# Company:          http://www.abkphoto.com
 # function:         this script will rename images, numerate them, move them
 #                   into subdirectories.
 #                   It will also convert proprietary raw files to dng and 
@@ -21,7 +22,6 @@ use Image::ExifTool;
 use Getopt::Std;
 use Cwd;
 use Cwd 'chdir';
-use vars qw( $opt_h $opt_d $testing );
 #use File::Copy;
 use File::Basename;
 use File::Find;
@@ -33,12 +33,6 @@ use Data::Dumper;
 #use Win32::EventLog;
 use constant false => 0;
 use constant true  => 1;
-
-# ----------- vars just for testing -------------------------------------------
-#$testing = 1;
-# ----------- vars just for testing -------------------------------------------
-
-getopt('d');
 
 #--------------------------------------------------------------------------
 # variables definition
@@ -53,13 +47,15 @@ $files2exclude,         # files to exclude from search
 $hash_ref,              # hash reference to the read structure
 $hash_new_names,        # hash with new names
 @img_ext,               # image extension name
+%opts,                  # command line options
 %os_env,                # OS type environment variables
 @raw_ext,               # raw files extension
 $raw_hash,              # reference to hash or raw directories
 $sep_sign,              # separation sign
 $shell_var,             # shell type
 $this_file,             # the name of this file/ program
-%thmb                  # properties for thumbnail files
+%thmb,                  # properties for thumbnail files
+$version                # version
 );
 
 
@@ -81,6 +77,7 @@ $files2exclude  = "Adobe Bridge Cache|Thumbs.db";
 $hash_ref       = undef;
 $hash_new_names = undef;
 @img_ext   = ('avi', 'cr2', 'jpg', 'jpeg', 'tiff');
+%opts = ();
 %os_env    = (
   'win_env' => 'MSWin32',
   'mac_env' => 'darwin',
@@ -104,42 +101,51 @@ $this_file = basename($0, "");
   'ext'    => "jpg",
   'dir'    => "thmb",
 );
+$version   = "1.0";
 
 #--------------------------------------------------------------------------
 # setup
 #--------------------------------------------------------------------------
-print STDOUT "\$^O = $^O\n" if(defined($testing));
-print STDOUT "\$shell_var = $shell_var\n" if(defined($testing));
+# init command line parameters
+getopts("htvd:", \%opts);
+
+print STDOUT "\$^O = $^O\n" if(defined($opts{t}));
+print STDOUT "\$shell_var = $shell_var\n" if(defined($opts{t}));
 
 if($shell_var eq $os_env{'win_env'})
 {
   $dng_converter = $os_env{'win_con'} if(-e -s $os_env{'win_con'});
-  print STDOUT "Windows env: $os_env{'win_con'}\n" if(defined($testing));
+  print STDOUT "Windows env: $os_env{'win_con'}\n" if(defined($opts{t}));
 }
 if($shell_var eq $os_env{'mac_env'})
 {
   $dng_converter = $os_env{'mac_con'} if(-e -s $os_env{'mac_con'});
-  print STDOUT "Mac OSX env: $os_env{'mac_con'}\n" if(defined($testing));
+  print STDOUT "Mac OSX env: $os_env{'mac_con'}\n" if(defined($opts{t}));
 }
 else
 {
-  print STDOUT "Unknown environment\n" if(defined($testing));
+  print STDOUT "Unknown environment\n" if(defined($opts{t}));
 }
 
-print STDOUT "\@ARGV  = ", scalar(@ARGV), "\n" if(defined($testing));
-print STDOUT "\$ARGV[0] = $ARGV[0]\n" if(defined($ARGV[0]) && defined($testing));
-print STDOUT "\$this_file = $this_file\n" if(defined($this_file) && defined($testing));
-print STDOUT "\$opt_h = $opt_h\n" if(defined($opt_h) && defined($testing));
-print STDOUT "\$opt_d = $opt_d\n" if(defined($opt_d) && defined($testing));
+print STDOUT "\@ARGV  = ", scalar(@ARGV), "\n" if(defined($opts{t}));
+print STDOUT "\$ARGV[0] = $ARGV[0]\n" if(defined($ARGV[0]) && defined($opts{t}));
+print STDOUT "\$this_file = $this_file\n" if(defined($this_file) && defined($opts{t}));
+print STDOUT "\$opts{h} = $opts{h}\n" if(defined($opts{h}) && defined($opts{t}));
+print STDOUT "\$opts{d} = $opts{d}\n" if(defined($opts{d}) && defined($opts{t}));
 
+die "$this_file version: $version\n(c) \@lex Berger\n"
+  if(@ARGV!=0 ||
+    (defined($opts{v}) && $opts{v} == 1));
 
 die "\n$this_file - renames and moves image files to a directory manufacturer_model_extension. \
 \
 usage: $this_file \
 -h             - help, this screen \
+-t             - prints test output, for debugging/testing \
+-v             - prints version \
 -d <dir  name> - directory name, default is \".\" \n"
   if(@ARGV!=0 ||
-    (defined($opt_h) && $opt_h == 1));
+    (defined($opts{h}) && $opts{h} == 1));
 
 
 #-------------------------------------------------------------------------------
@@ -159,15 +165,15 @@ sub convert_to_dng_win( $ );
 # main program
 #=============================================================================
 # if the directory was not defined
-my ($curDir) = (!defined($opt_d) || $opt_d eq '.' || $opt_d eq './') ? '.' : cwd();
+my ($curDir) = (!defined($opts{d}) || $opts{d} eq '.' || $opts{d} eq './') ? '.' : cwd();
 
-print STDOUT "[MAIN] \$curDir = $curDir\n" if(defined($testing));
+print STDOUT "[MAIN] \$curDir = $curDir\n" if(defined($opts{t}));
 
 # change to the directory if required
 if($curDir ne '.')
 {
-  chdir "$opt_d" or die "cannot change to directory $opt_d: $!\n";
-  print STDOUT "[MAIN] current directory = $ENV{PWD}\n" if(defined($testing));
+  chdir "$opts{d}" or die "cannot change to directory $opts{d}: $!\n";
+  print STDOUT "[MAIN] current directory = $ENV{PWD}\n" if(defined($opts{t}));
 }
 
 
@@ -181,7 +187,7 @@ if($curDir ne '.')
 #--------------------------------------------------------------------------
 if(defined($hash_ref))
 {
-  print STDOUT "[MAIN] \$hash_ref = $hash_ref, \$hash_new_names = $hash_new_names\n" if(defined($testing));
+  print STDOUT "[MAIN] \$hash_ref = $hash_ref, \$hash_new_names = $hash_new_names\n" if(defined($opts{t}));
   #------------------------------------------------------------------------
   # create the directories after the manufacturer_model_type
   #-----------------------------------------------------------------------
@@ -193,12 +199,12 @@ if(defined($hash_ref))
   #-----------------------------------------------------------------------
   if(defined($dng_converter))
   {
-    print STDOUT "[MAIN] dng_converter available\n" if(defined($testing));
+    print STDOUT "[MAIN] dng_converter available\n" if(defined($opts{t}));
 
     # read original directory with RAW files
     $raw_hash = read_raw_dirs ( );
     # convert to dng and if successful delete the original raw directory
-    print STDOUT "[MAIN] \$raw_hash = $raw_hash\n" if(defined($testing));
+    print STDOUT "[MAIN] \$raw_hash = $raw_hash\n" if(defined($opts{t}));
     
     #depending on the environment a different function call will be called
 	# windows env does not cope well with fork, wait, waitpid
@@ -224,7 +230,7 @@ else
 if($curDir ne '.')
 {
   chdir "$curDir" or die "cannot change to directory $curDir: $!\n";
-  print STDOUT "current directory = $ENV{PWD}\n" if(defined($testing));
+  print STDOUT "current directory = $ENV{PWD}\n" if(defined($opts{t}));
 }
 
 
@@ -250,7 +256,7 @@ sub read_dir ( )
     %ret_hash,
     %ret_hash_names
   );
-  print STDOUT "-> [READ_DIR]\n" if(defined($testing));
+  print STDOUT "-> [READ_DIR]\n" if(defined($opts{t}));
 
   @array_tmp  = ();
   $create_date = 'CreateDate';
@@ -287,7 +293,7 @@ sub read_dir ( )
     lc($file) =~ /\.(\w+)$/;
     $file_base = $`;
     $file_ext  = $1;
-    print STDOUT "[READ_DIRS] \$file_base = $file_base, \$file_ext = $file_ext \n" if(defined($testing) && defined($file_ext));
+    print STDOUT "[READ_DIRS] \$file_base = $file_base, \$file_ext = $file_ext \n" if(defined($opts{t}) && defined($file_ext));
 
     # check if it is a thumbnail from a raw file
     if($file_ext eq $thmb{'ext'})
@@ -304,7 +310,7 @@ sub read_dir ( )
     $file_info = $file_exif->ImageInfo($file);
     $file_info = $file_exif->GetInfo($file, \@array_tmp);
 
-    print STDOUT "[READ_DIRS] \$file = $file, \$file_ext = $file_ext \n" if(defined($testing) && defined($file_ext));
+    print STDOUT "[READ_DIRS] \$file = $file, \$file_ext = $file_ext \n" if(defined($opts{t}) && defined($file_ext));
 #    printf("%-24s : %s\n", $make, $$file_info{$make});
 #    printf("%-24s : %s\n", $model, $$file_info{$model});
 #    printf("%-24s : %s\n", $create_date, $$file_info{$create_date});
@@ -358,10 +364,10 @@ sub read_dir ( )
     push @{$ret_hash_names{$dir_name}}, $$file_info{$create_date};
   }
 
-  print STDOUT "[READ_DIRS] \$ret_hash =\n", Dumper \%ret_hash, "\n\n" if(defined($testing));
-  print STDOUT "[READ_DIRS] \$ret_hash_names =\n", Dumper \%ret_hash_names, "\n\n" if(defined($testing));
+  print STDOUT "[READ_DIRS] \$ret_hash =\n", Dumper \%ret_hash, "\n\n" if(defined($opts{t}));
+  print STDOUT "[READ_DIRS] \$ret_hash_names =\n", Dumper \%ret_hash_names, "\n\n" if(defined($opts{t}));
 
-  print STDOUT "<- [READ_DIR]\n" if(defined($testing));
+  print STDOUT "<- [READ_DIR]\n" if(defined($opts{t}));
   return \%ret_hash, \%ret_hash_names;
 }
 
@@ -379,18 +385,18 @@ sub move_and_rename_files ( $$ )
   my @array_tmp;
   my $date_backup;
   my $cam_model;
-  print STDOUT "-> [MOVE_AND_RENAME_FILES]\n" if(defined($testing));
+  print STDOUT "-> [MOVE_AND_RENAME_FILES]\n" if(defined($opts{t}));
 
-  print STDOUT "[MOVE_AND_RENAME_FILES] \$dir_hash = $dir_hash, \$file_hash = $file_hash\n" if(defined($testing));
+  print STDOUT "[MOVE_AND_RENAME_FILES] \$dir_hash = $dir_hash, \$file_hash = $file_hash\n" if(defined($opts{t}));
 
   # get the last part of directory
   $event_name = lc(basename(cwd()));
-  # print STDOUT "1 [MOVE_AND_RENAME_FILES] \$event_name = $event_name\n" if(defined($testing));
+  # print STDOUT "1 [MOVE_AND_RENAME_FILES] \$event_name = $event_name\n" if(defined($opts{t}));
   @array_tmp = split $sep_sign, $event_name;
   $date_backup = shift @array_tmp;
-  # print STDOUT "2[MOVE_AND_RENAME_FILES] \$date_backup = $date_backup\n" if(defined($testing));
+  # print STDOUT "2[MOVE_AND_RENAME_FILES] \$date_backup = $date_backup\n" if(defined($opts{t}));
   $event_name = join $sep_sign, @array_tmp;
-  # print STDOUT "[MOVE_AND_RENAME_FILES] dir = $event_name\n" if(defined($testing));
+  # print STDOUT "[MOVE_AND_RENAME_FILES] dir = $event_name\n" if(defined($opts{t}));
 
   # create sub directory structure
   foreach(keys %{$dir_hash})
@@ -407,22 +413,22 @@ sub move_and_rename_files ( $$ )
       my @dir_array=();
       @dir_array = split($sep_sign, $_);
       $cam_model = $dir_array[1];
-#      print STDOUT "[MOVE_AND_RENAME_FILES] \$cam_model = $cam_model\n" if(defined($testing));
+#      print STDOUT "[MOVE_AND_RENAME_FILES] \$cam_model = $cam_model\n" if(defined($opts{t}));
     
-#      print STDOUT "[MOVE_AND_RENAME_FILES] [$i]old_name: ${$$dir_hash{$_}}[$i]\n" if(defined($testing));
+#      print STDOUT "[MOVE_AND_RENAME_FILES] [$i]old_name: ${$$dir_hash{$_}}[$i]\n" if(defined($opts{t}));
       if(defined(${$$file_hash{$_}}[$i]) && (${$$file_hash{$_}}[$i] ne ""))
       {
         rename ${$$dir_hash{$_}}[$i], sprintf("$_/${$$file_hash{$_}}[$i]_$cam_model" ."_$event_name" . "_" . "%03d.$file_ext", $i+1);
-#        print STDOUT sprintf("$_/${$$file_hash{$_}}[$i]_$event_name" . "_" . "%03d.$file_ext\n", $i+1) if(defined($testing));
+#        print STDOUT sprintf("$_/${$$file_hash{$_}}[$i]_$event_name" . "_" . "%03d.$file_ext\n", $i+1) if(defined($opts{t}));
       }
       else
       {
         rename ${$$dir_hash{$_}}[$i], sprintf("$_/$date_backup" . "_$event_name" . "_" . "%03d.$file_ext", $i+1);
-#        print STDOUT sprintf("$_/$date_backup" . "_" . "%03d.$file_ext\n", $i+1) if(defined($testing));
+#        print STDOUT sprintf("$_/$date_backup" . "_" . "%03d.$file_ext\n", $i+1) if(defined($opts{t}));
       }
     }
   }
-  print STDOUT "<- [MOVE_AND_RENAME_FILES]\n" if(defined($testing));
+  print STDOUT "<- [MOVE_AND_RENAME_FILES]\n" if(defined($opts{t}));
 }
 
 ################################################################################
@@ -432,7 +438,7 @@ sub move_and_rename_files ( $$ )
 ################################################################################
 sub read_raw_dirs ( )
 {
-  print STDOUT "-> [READ_RAW_DIRS]\n" if(defined($testing));
+  print STDOUT "-> [READ_RAW_DIRS]\n" if(defined($opts{t}));
   my %ret_hash;
   my @array_tmp;
   my $dir;
@@ -445,12 +451,12 @@ sub read_raw_dirs ( )
   # read the directory names and build up a structure
   foreach $dir (@array_tmp)
   {
-    print STDOUT "[READ_RAW_DIRS] \$dir = $dir\n" if(defined($testing));
+    print STDOUT "[READ_RAW_DIRS] \$dir = $dir\n" if(defined($opts{t}));
     foreach(@raw_ext)
     {
       if($dir =~ /$_$/)
       {
-        print STDOUT "[READ_RAW_DIRS] \$_ = $_, \$dir = $dir\n" if(defined($testing));
+        print STDOUT "[READ_RAW_DIRS] \$_ = $_, \$dir = $dir\n" if(defined($opts{t}));
 
         # change into the RAW file directory to read the files sizes also, to ignore 0 byte size files
 		chdir "$dir" or die "[ERROR] cannot change to directory $dir: $!\n";
@@ -464,9 +470,9 @@ sub read_raw_dirs ( )
     }
   }
   
-  print STDOUT "[READ_RAW_DIRS] \$ret_hash =\n", Dumper \%ret_hash, "\n\n" if(defined($testing));
+  print STDOUT "[READ_RAW_DIRS] \$ret_hash =\n", Dumper \%ret_hash, "\n\n" if(defined($opts{t}));
 
-  print STDOUT "<- [READ_RAW_DIRS]\n" if(defined($testing));
+  print STDOUT "<- [READ_RAW_DIRS]\n" if(defined($opts{t}));
   return \%ret_hash;
 }
 
@@ -482,17 +488,17 @@ sub convert_to_dng ( $ )
   my ($dng_dir, $raw_dir, $max_kids, %work, @work, %pids, $ret_val, $res);
   my ($info, $info_cpu, $info_cpu_ht, %options);
   
-  print STDOUT "-> [CONVERT_TO_DNG] \$dng_hash = $dng_hash\n" if(defined($testing));
+  print STDOUT "-> [CONVERT_TO_DNG] \$dng_hash = $dng_hash\n" if(defined($opts{t}));
   $ret_val = true;
   
   $info = Sys::Info->new;
   $info_cpu  = $info->device( CPU => %options );
 
-  printf STDOUT "[CONVERT_TO_DNG] CPU: %s\n", scalar($info_cpu->identify)  || 'N/A' if(defined($testing));
-  printf STDOUT "[CONVERT_TO_DNG] CPU speed is %s MHz\n", $info_cpu->speed || 'N/A' if(defined($testing));
-  printf STDOUT "[CONVERT_TO_DNG] There are %d CPUs\n"  , $info_cpu->count || 1 if(defined($testing));
-  printf STDOUT "[CONVERT_TO_DNG] Hyper threads %d\n"   , $info_cpu->ht    || 1 if(defined($testing));
-  printf STDOUT "[CONVERT_TO_DNG] CPU load: %s\n"       , $info_cpu->load  || 0 if(defined($testing));
+  printf STDOUT "[CONVERT_TO_DNG] CPU: %s\n", scalar($info_cpu->identify)  || 'N/A' if(defined($opts{t}));
+  printf STDOUT "[CONVERT_TO_DNG] CPU speed is %s MHz\n", $info_cpu->speed || 'N/A' if(defined($opts{t}));
+  printf STDOUT "[CONVERT_TO_DNG] There are %d CPUs\n"  , $info_cpu->count || 1 if(defined($opts{t}));
+  printf STDOUT "[CONVERT_TO_DNG] Hyper threads %d\n"   , $info_cpu->ht    || 1 if(defined($opts{t}));
+  printf STDOUT "[CONVERT_TO_DNG] CPU load: %s\n"       , $info_cpu->load  || 0 if(defined($opts{t}));
   $info_cpu_ht = $info_cpu->ht;
 #  $info_cpu_ht = $info_cpu->count;
 
@@ -511,7 +517,7 @@ sub convert_to_dng ( $ )
     # if number of files to convert > then number of available threads
     $max_kids = ( $info_cpu_ht > $#{$$dng_hash{$_}} ) ? $#{$$dng_hash{$_}} + 1 : $info_cpu_ht;
     
-    print STDOUT "[CONVERT_TO_DNG] \$max_kids = $max_kids\n" if(defined($testing));
+    print STDOUT "[CONVERT_TO_DNG] \$max_kids = $max_kids\n" if(defined($opts{t}));
     
     %work = map { $_ => 1 } 1 .. ($#{$$dng_hash{$_}} + 1);
     @work = sort {$a <=> $b} keys %work;
@@ -522,15 +528,15 @@ sub convert_to_dng ( $ )
       my $work = shift @work;
       my $pid = undef;
 
-      print STDOUT "[CONVERT_TO_DNG] \$work = $work\n" if(defined($testing));
-      print STDOUT "[CONVERT_TO_DNG] \@work = @work\n" if(defined($testing));
+      print STDOUT "[CONVERT_TO_DNG] \$work = $work\n" if(defined($opts{t}));
+      print STDOUT "[CONVERT_TO_DNG] \@work = @work\n" if(defined($opts{t}));
       die "[CONVERT_TO_DNG] could not fork" unless defined($pid = fork());
 
       if ($pid)
       {
         # parent running
         $pids{$pid} = 1;
-        print STDOUT "[CONVERT_TO_DNG] $$ parent \$pid = $pid, \$work = $work\n" if(defined($testing));
+        print STDOUT "[CONVERT_TO_DNG] $$ parent \$pid = $pid, \$work = $work\n" if(defined($opts{t}));
         # proceed to the next file if there is still a slot available
         # otherwise the loop will wait at the wait condition below
         $res = waitpid $pid, WNOHANG;
@@ -539,19 +545,19 @@ sub convert_to_dng ( $ )
       else
       {
        # child running
-        print STDOUT "[CONVERT_TO_DNG] $$ kid executing $work\n" if(defined($testing));
+        print STDOUT "[CONVERT_TO_DNG] $$ kid executing $work\n" if(defined($opts{t}));
         if(defined(${$$dng_hash{$_}}[$work-1]) && (${$$dng_hash{$_}}[$work-1] ne ""))
         {
           $ret_val = convert_to_dng_task( $dng_dir, "$raw_dir/${$$dng_hash{$_}}[$work-1]" );
         }
-        print STDOUT "[CONVERT_TO_DNG] $$ kid done $work\n" if(defined($testing));
+        print STDOUT "[CONVERT_TO_DNG] $$ kid done $work\n" if(defined($opts{t}));
         ($ret_val) ? exit $work : exit 0;
       }
-      print "[CONVERT_TO_DNG] $$ waiting\n" if(defined($testing));;
+      print "[CONVERT_TO_DNG] $$ waiting\n" if(defined($opts{t}));;
       $res = wait;
 #      my $res = waitpid $pid, 0;
 #      my $res = waitpid -1, WNOHANG;
-      print "[CONVERT_TO_DNG] $$ \$res = $res\n" if(defined($testing));;
+      print "[CONVERT_TO_DNG] $$ \$res = $res\n" if(defined($opts{t}));;
 
       process_pids( \%pids, \%work, $res );
       select undef, undef, undef, .25;
@@ -563,7 +569,7 @@ sub convert_to_dng ( $ )
       process_pids( \%pids, \%work, $res );
     }
   }
-  print STDOUT "<- [CONVERT_TO_DNG]\n" if(defined($testing));
+  print STDOUT "<- [CONVERT_TO_DNG]\n" if(defined($opts{t}));
   return $ret_val;
 }
 
@@ -575,23 +581,23 @@ sub convert_to_dng ( $ )
 sub process_pids ( $$$ )
 {
   my ( $pids, $work, $res ) = @_;
-  print STDOUT "-> [PROCESS_PIDS] $pids, $work, $res\n" if(defined($testing));
+  print STDOUT "-> [PROCESS_PIDS] $pids, $work, $res\n" if(defined($opts{t}));
 
-  print STDOUT "[PROCESS_PIDS] \$res = $res \n" if(defined($testing));
+  print STDOUT "[PROCESS_PIDS] \$res = $res \n" if(defined($opts{t}));
 
   if ($res > 0)
   {
     delete $$pids{$res};
     my $rc = $? >> 8; #get the exit status
-    print STDOUT "[PROCESS_PIDS] $$ saw $res was done with $rc\n" if(defined($testing));
+    print STDOUT "[PROCESS_PIDS] $$ saw $res was done with $rc\n" if(defined($opts{t}));
     delete $$work{$rc};
-    print STDOUT "[PROCESS_PIDS] $$ work left: ", join(", ", sort {$a <=> $b} keys %{$work}), "\n" if(defined($testing));
+    print STDOUT "[PROCESS_PIDS] $$ work left: ", join(", ", sort {$a <=> $b} keys %{$work}), "\n" if(defined($opts{t}));
   }
   else
   {
-    print STDOUT "[PROCESS_PIDS] $$ wait returned < 0, FAIL\n" if(defined($testing));
+    print STDOUT "[PROCESS_PIDS] $$ wait returned < 0, FAIL\n" if(defined($opts{t}));
   }
-  print STDOUT "<- [PROCESS_PIDS]\n" if(defined($testing));
+  print STDOUT "<- [PROCESS_PIDS]\n" if(defined($opts{t}));
 }
 
 ################################################################################
@@ -606,7 +612,7 @@ sub delete_raw_dirs ( $ )
   my ($raw_file, $dng_file) = undef, undef;
   my $ret_val = true;
   
-  print STDOUT "-> [DELETE_RAW_DIRS]\n" if(defined($testing));
+  print STDOUT "-> [DELETE_RAW_DIRS]\n" if(defined($opts{t}));
 
   # check whether all original raw files has been converted
   # if there are more then 1 directory with raw files
@@ -618,8 +624,8 @@ sub delete_raw_dirs ( $ )
     $dng_dir = $_;
     $dng_dir =~ s/\w{3}$/$dng_ext/;
 
-    print STDOUT "[DELETE_RAW_DIRS] \$dng_dir       = $dng_dir\n" if(defined($testing));
-    print STDOUT "[DELETE_RAW_DIRS] \$raw_dir       = $raw_dir\n" if(defined($testing));
+    print STDOUT "[DELETE_RAW_DIRS] \$dng_dir       = $dng_dir\n" if(defined($opts{t}));
+    print STDOUT "[DELETE_RAW_DIRS] \$raw_dir       = $raw_dir\n" if(defined($opts{t}));
 
     # change to the dng directory, otherwise we won't get the file size
     chdir "$dng_dir" or die "cannot change to directory $dng_dir: $!\n";
@@ -630,29 +636,29 @@ sub delete_raw_dirs ( $ )
     # change back to the original directory
     chdir ".." or die "cannot change to directory .. : $!\n";
 
-    print STDOUT "[DELETE_RAW_DIRS] \$#file_names       = $#file_names\n" if(defined($testing));
-    print STDOUT "[DELETE_RAW_DIRS] \$#{$$dng_hash{$_}} = $#{$$dng_hash{$_}}\n" if(defined($testing));
-    print STDOUT "[DELETE_RAW_DIRS] \@file_names = @file_names\n" if(defined($testing));
+    print STDOUT "[DELETE_RAW_DIRS] \$#file_names       = $#file_names\n" if(defined($opts{t}));
+    print STDOUT "[DELETE_RAW_DIRS] \$#{$$dng_hash{$_}} = $#{$$dng_hash{$_}}\n" if(defined($opts{t}));
+    print STDOUT "[DELETE_RAW_DIRS] \@file_names = @file_names\n" if(defined($opts{t}));
 
 
     if ( $#file_names == $#{$$dng_hash{$_}} )
     {
       for my $i (0 .. $#file_names)
       {
-#        print STDOUT "[DELETE_RAW_DIRS] \$file_names[$i]         = $file_names[$i]\n" if(defined($testing));
-#        print STDOUT "[DELETE_RAW_DIRS] \${$$dng_hash{$_}}[$i] = ${$$dng_hash{$_}}[$i]\n" if(defined($testing));
+#        print STDOUT "[DELETE_RAW_DIRS] \$file_names[$i]         = $file_names[$i]\n" if(defined($opts{t}));
+#        print STDOUT "[DELETE_RAW_DIRS] \${$$dng_hash{$_}}[$i] = ${$$dng_hash{$_}}[$i]\n" if(defined($opts{t}));
 
         $raw_file = basename(${$$dng_hash{$_}}[$i], @raw_ext);
         $dng_file = basename($file_names[$i], $dng_ext);
-        print STDOUT "[DELETE_RAW_DIRS] \$raw_file = $raw_file\n" if(defined($testing));
-        print STDOUT "[DELETE_RAW_DIRS] \$dng_file = $dng_file\n" if(defined($testing));
+        print STDOUT "[DELETE_RAW_DIRS] \$raw_file = $raw_file\n" if(defined($opts{t}));
+        print STDOUT "[DELETE_RAW_DIRS] \$dng_file = $dng_file\n" if(defined($opts{t}));
 
         if($raw_file ne $dng_file)
         {
           $ret_val = false;
           print STDOUT "[DELETE_RAW_DIRS] didn't delete $raw_dir, file names didn't macth\n";
-          print STDOUT "[DELETE_RAW_DIRS] \$raw_file != \$dng_file\n" if(defined($testing));
-          print STDOUT "[DELETE_RAW_DIRS] $raw_file != $dng_file\n" if(defined($testing));
+          print STDOUT "[DELETE_RAW_DIRS] \$raw_file != \$dng_file\n" if(defined($opts{t}));
+          print STDOUT "[DELETE_RAW_DIRS] $raw_file != $dng_file\n" if(defined($opts{t}));
           last;
         }
       }
@@ -674,7 +680,7 @@ sub delete_raw_dirs ( $ )
     }
 
   }
-  print STDOUT "<- [DELETE_RAW_DIRS]\n" if(defined($testing));
+  print STDOUT "<- [DELETE_RAW_DIRS]\n" if(defined($opts{t}));
   return $ret_val;
 }
 
@@ -689,26 +695,26 @@ sub convert_to_dng_task( $$ )
   my $ret_val = true;
   my @cmd_param;
   
-  print STDOUT "-> [CONVERT_TO_DNG_TASK] $$ \$d_dng = $d_dng, \$f_dng = $f_dng\n" if(defined($testing));
+  print STDOUT "-> [CONVERT_TO_DNG_TASK] $$ \$d_dng = $d_dng, \$f_dng = $f_dng\n" if(defined($opts{t}));
 
   push @cmd_param, "$dng_converter";
   push @cmd_param, "-c -p1 -n";
   push @cmd_param, "-d";
   push @cmd_param, $d_dng;
   push @cmd_param, $f_dng;
-  print STDOUT "[CONVERT_TO_DNG_TASK] $$ @cmd_param\n" if(defined($testing));
+  print STDOUT "[CONVERT_TO_DNG_TASK] $$ @cmd_param\n" if(defined($opts{t}));
   system ( @cmd_param ); 
 
   if( $? == -1 )
   {
-    print STDOUT "[CONVERT_TO_DNG_TASK] $$ dng conversion failed: $!\n" if(defined($testing));
+    print STDOUT "[CONVERT_TO_DNG_TASK] $$ dng conversion failed: $!\n" if(defined($opts{t}));
     $ret_val = false;
   }
   else
   {
-    printf STDOUT "[CONVERT_TO_DNG_TASK] $$ dng conversion exited with value %d\n", $? >> 8 if(defined($testing));
+    printf STDOUT "[CONVERT_TO_DNG_TASK] $$ dng conversion exited with value %d\n", $? >> 8 if(defined($opts{t}));
   }
-  print STDOUT "<- [CONVERT_TO_DNG_TASK] $$\n" if(defined($testing));
+  print STDOUT "<- [CONVERT_TO_DNG_TASK] $$\n" if(defined($opts{t}));
   return $ret_val;
 }
 
@@ -723,7 +729,7 @@ sub convert_to_dng_win( $ )
   my ($dng_hash) = @_;
   my ($dng_dir, $raw_dir, %work, @work, $ret_val);
   
-  print STDOUT "-> [CONVERT_TO_DNG_WIN] \$dng_hash = $dng_hash\n" if(defined($testing));
+  print STDOUT "-> [CONVERT_TO_DNG_WIN] \$dng_hash = $dng_hash\n" if(defined($opts{t}));
   $ret_val = true;
   
 #  print OUTPUT Dumper(%{$raw_ref});
@@ -746,18 +752,18 @@ sub convert_to_dng_win( $ )
     {
       my $work = shift @work;
 
-      print STDOUT "[CONVERT_TO_DNG] \$work = $work\n" if(defined($testing));
-      print STDOUT "[CONVERT_TO_DNG] \@work = @work\n" if(defined($testing));
+      print STDOUT "[CONVERT_TO_DNG] \$work = $work\n" if(defined($opts{t}));
+      print STDOUT "[CONVERT_TO_DNG] \@work = @work\n" if(defined($opts{t}));
 
-      print STDOUT "[CONVERT_TO_DNG] $$ kid executing $work\n" if(defined($testing));
+      print STDOUT "[CONVERT_TO_DNG] $$ kid executing $work\n" if(defined($opts{t}));
       if(defined(${$$dng_hash{$_}}[$work-1]) && (${$$dng_hash{$_}}[$work-1] ne ""))
       {
         $ret_val = convert_to_dng_task( $dng_dir, "$raw_dir/${$$dng_hash{$_}}[$work-1]" );
       }
-      print STDOUT "[CONVERT_TO_DNG] $$ kid done $work\n" if(defined($testing));
+      print STDOUT "[CONVERT_TO_DNG] $$ kid done $work\n" if(defined($opts{t}));
     }
   }
-  print STDOUT "<- [CONVERT_TO_DNG]\n" if(defined($testing));
+  print STDOUT "<- [CONVERT_TO_DNG]\n" if(defined($opts{t}));
   return $ret_val;
 }
 
