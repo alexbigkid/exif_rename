@@ -1,1 +1,6 @@
 .DS_Store
+.git
+.gitignore
+.gitconfig
+.gitignore_global
+
