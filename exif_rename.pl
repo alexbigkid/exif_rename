@@ -208,16 +208,21 @@ if(defined($hash_ref))
     # convert to dng and if successful delete the original raw directory
     print STDOUT "[MAIN] \$raw_hash = $raw_hash\n" if(defined($opts{t}));
     
-    #depending on the environment a different function call will be called
-    # windows env does not cope well with fork, wait, waitpid
-    # so the dng conversion is slower
-    if ( ($os_env{$shell_var})->( $raw_hash ) )
+    # check for the error condition If the raw hash has been defined
+    # from the previous function call
+    if(defined($raw_hash))
     {
-      delete_raw_dirs ( $raw_hash );
-    }
-    else
-    {
-      print STDOUT "[MAIN] convert_to_dng delivered false!\n";
+      # depending on the environment a different function call will be called
+      # windows env does not cope well with fork, wait, waitpid
+      # so the dng conversion is slower
+      if ( ($os_env{$shell_var})->( $raw_hash ) )
+      {
+        delete_raw_dirs ( $raw_hash );
+      }
+      else
+      {
+        print STDOUT "[MAIN] convert_to_dng delivered false!\n";
+      }
     }
   }
 }
