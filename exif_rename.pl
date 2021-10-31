@@ -5,10 +5,10 @@
 # Company:          http://www.abkphoto.com
 # function:         this script will rename images, numerate them, move them
 #                   into subdirectories.
-#                   It will also convert proprietary raw files to dng and 
+#                   It will also convert proprietary raw files to dng and
 #                   delete the original raw files after that if conversion
 #                   went well.
-# version:          V1.0 03/20/2016 
+# version:          V1.0 03/20/2016
 # changed by:       Alex Berger
 ###############################################################################
 
@@ -16,7 +16,11 @@ use strict;
 use warnings;
 use POSIX ":sys_wait_h";
 #use lib "$ENV{'HOME'}/lx/bin/lib";
-#use lib "$ENV{'HOME'}/Pictures/bin";
+# use lib "$ENV{'HOME'}/abkBin/Image";
+# use lib "/Users/abk/dev/git/exif_rename";
+use lib "$ENV{'HOME'}/.cpan/build/Image-ExifTool-10.55-xw9FL4/lib";
+use lib "$ENV{'HOME'}/.cpan/build/Sys-Info-0.78-syy4di/lib";
+use lib "$ENV{'HOME'}/.cpan/build/Sys-Info-Base-0.7804-4PBOoH/lib";
 use lib "/usr/bin/lib";
 use Image::ExifTool;
 use Getopt::Std;
@@ -194,7 +198,7 @@ if(defined($hash_ref))
   # create the directories after the manufacturer_model_type
   #-----------------------------------------------------------------------
   move_and_rename_files($hash_ref, $hash_new_names);
-  
+
   #------------------------------------------------------------------------
   # check for dng converter availability
   # convert to DNG format if we can and delete original raw files
@@ -207,7 +211,7 @@ if(defined($hash_ref))
     $raw_hash = read_raw_dirs ( );
     # convert to dng and if successful delete the original raw directory
     print STDOUT "[MAIN] \$raw_hash = $raw_hash\n" if(defined($opts{t}));
-    
+
     # check for the error condition If the raw hash has been defined
     # from the previous function call
     if(defined($raw_hash))
@@ -312,7 +316,7 @@ sub read_dir ( )
     }
     $file_exif = new Image::ExifTool;
     $file_exif->Options(DateFormat => '%Y%m%d_%H%M%S');
-    
+
     @array_tmp  = ($make, $model, $create_date);
     $file_info = $file_exif->ImageInfo($file);
     $file_info = $file_exif->GetInfo($file, \@array_tmp);
@@ -330,7 +334,7 @@ sub read_dir ( )
     }
     else
     {
-      $$file_info{$make} = 'unknown';      
+      $$file_info{$make} = 'unknown';
     }
 
     # modify model to just 1 word
@@ -362,11 +366,11 @@ sub read_dir ( )
     }
     else
     {
-      $$file_info{$model} = 'unknown';      
+      $$file_info{$model} = 'unknown';
     }
 
     $dir_name = join '_', $$file_info{$make}, $$file_info{$model}, $file_ext;
-    
+
     push @{$ret_hash{$dir_name}}, $file;
     push @{$ret_hash_names{$dir_name}}, $$file_info{$create_date};
   }
@@ -409,7 +413,7 @@ sub move_and_rename_files ( $$ )
   foreach(keys %{$dir_hash})
   {
     my $file_ext;
-    
+
     lc(${$$dir_hash{$_}}[0]) =~ /\.(\w+)$/;
     $file_ext  = $1;
 
@@ -421,7 +425,7 @@ sub move_and_rename_files ( $$ )
       @dir_array = split($sep_sign, $_);
       $cam_model = $dir_array[1];
 #      print STDOUT "[MOVE_AND_RENAME_FILES] \$cam_model = $cam_model\n" if(defined($opts{t}));
-    
+
 #      print STDOUT "[MOVE_AND_RENAME_FILES] [$i]old_name: ${$$dir_hash{$_}}[$i]\n" if(defined($opts{t}));
       if(defined(${$$file_hash{$_}}[$i]) && (${$$file_hash{$_}}[$i] ne ""))
       {
@@ -476,7 +480,7 @@ sub read_raw_dirs ( )
       }
     }
   }
-  
+
   print STDOUT "[READ_RAW_DIRS] \$ret_hash =\n", Dumper \%ret_hash, "\n\n" if(defined($opts{t}));
 
   print STDOUT "<- [READ_RAW_DIRS]\n" if(defined($opts{t}));
@@ -494,10 +498,10 @@ sub convert_to_dng ( $ )
   my ($dng_hash) = @_;
   my ($dng_dir, $raw_dir, $max_kids, %work, @work, %pids, $ret_val, $res);
   my ($info, $info_cpu, $info_cpu_ht, %options);
-  
+
   print STDOUT "-> [CONVERT_TO_DNG] \$dng_hash = $dng_hash\n" if(defined($opts{t}));
   $ret_val = true;
-  
+
   $info = Sys::Info->new;
   $info_cpu  = $info->device( CPU => %options );
 
@@ -520,12 +524,12 @@ sub convert_to_dng ( $ )
     $dng_dir =~ s/\w{3}$/$dng_ext/;
     mkdir $dng_dir, 0755 or die $! unless -d $dng_dir;
     printf STDOUT "[CONVERT_TO_DNG] created directory: $dng_dir\n";
-    
+
     # if number of files to convert > then number of available threads
     $max_kids = ( $info_cpu_ht > $#{$$dng_hash{$_}} ) ? $#{$$dng_hash{$_}} + 1 : $info_cpu_ht;
-    
+
     print STDOUT "[CONVERT_TO_DNG] \$max_kids = $max_kids\n" if(defined($opts{t}));
-    
+
     %work = map { $_ => 1 } 1 .. ($#{$$dng_hash{$_}} + 1);
     @work = sort {$a <=> $b} keys %work;
 
@@ -569,7 +573,7 @@ sub convert_to_dng ( $ )
       process_pids( \%pids, \%work, $res );
       select undef, undef, undef, .25;
     }
-    
+
     # wait until all child processes are complete
     while(($res=wait) != -1)
     {
@@ -618,7 +622,7 @@ sub delete_raw_dirs ( $ )
   my ($dng_dir, $raw_dir) = undef, undef;
   my ($raw_file, $dng_file) = undef, undef;
   my $ret_val = true;
-  
+
   print STDOUT "-> [DELETE_RAW_DIRS]\n" if(defined($opts{t}));
 
   # check whether all original raw files has been converted
@@ -675,7 +679,7 @@ sub delete_raw_dirs ( $ )
       $ret_val = false;
       print STDOUT "[DELETE_RAW_DIRS] didn't delete $raw_dir, number of converted files mismatch\n";
     }
-    
+
     if($ret_val)
     {
       print STDOUT "[DELETE_RAW_DIRS] deleting dir: $raw_dir\n";
@@ -701,7 +705,7 @@ sub convert_to_dng_task( $$ )
   my ($d_dng, $f_dng) = @_;
   my $ret_val = true;
   my @cmd_param;
-  
+
   print STDOUT "-> [CONVERT_TO_DNG_TASK] $$ \$d_dng = $d_dng, \$f_dng = $f_dng\n" if(defined($opts{t}));
 
   push @cmd_param, "$dng_converter";
@@ -710,7 +714,7 @@ sub convert_to_dng_task( $$ )
   push @cmd_param, $d_dng;
   push @cmd_param, $f_dng;
   print STDOUT "[CONVERT_TO_DNG_TASK] $$ @cmd_param\n" if(defined($opts{t}));
-  system ( @cmd_param ); 
+  system ( @cmd_param );
 
   if( $? == -1 )
   {
@@ -735,10 +739,10 @@ sub convert_to_dng_win( $ )
 {
   my ($dng_hash) = @_;
   my ($dng_dir, $raw_dir, %work, @work, $ret_val);
-  
+
   print STDOUT "-> [CONVERT_TO_DNG_WIN] \$dng_hash = $dng_hash\n" if(defined($opts{t}));
   $ret_val = true;
-  
+
 #  print OUTPUT Dumper(%{$raw_ref});
 
   # if there are more then 1 directory with raw files
@@ -750,7 +754,7 @@ sub convert_to_dng_win( $ )
     $dng_dir =~ s/\w{3}$/$dng_ext/;
     mkdir $dng_dir, 0755 or die $! unless -d $dng_dir;
     printf STDOUT "[CONVERT_TO_DNG] created directory: $dng_dir\n";
-    
+
     %work = map { $_ => 1 } 1 .. ($#{$$dng_hash{$_}} + 1);
     @work = sort {$a <=> $b} keys %work;
 
